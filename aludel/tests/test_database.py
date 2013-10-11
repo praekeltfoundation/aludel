@@ -1,6 +1,4 @@
-from sqlalchemy import (
-    Table, Column, Integer, String, UniqueConstraint, ForeignKey,
-)
+from sqlalchemy import Table, Column, Integer, String, UniqueConstraint
 from sqlalchemy.types import UserDefinedType
 
 from twisted.trial.unittest import TestCase

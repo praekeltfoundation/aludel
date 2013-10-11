@@ -1,6 +1,3 @@
-from datetime import datetime
-from hashlib import md5
-from itertools import izip_longest
 import json
 from urllib import urlencode
 from StringIO import StringIO
