@@ -13,22 +13,23 @@ class TableMissingError(Exception):
     pass
 
 
+class make_table(object):
+    def __init__(self, *args, **kw):
+        self.args = args
+        self.kw = kw
+
+    def make_table(self, name, metadata):
+        return Table(name, metadata, *self.copy_args(), **self.kw)
+
+    def copy_args(self):
+        for arg in self.args:
+            if isinstance(arg, Column):
+                yield arg.copy()
+            else:
+                yield arg
+
+
 class PrefixedTableCollection(object):
-    class make_table(object):
-        def __init__(self, *args, **kw):
-            self.args = args
-            self.kw = kw
-
-        def make_table(self, name, metadata):
-            return Table(name, metadata, *self.copy_args(), **self.kw)
-
-        def copy_args(self):
-            for arg in self.args:
-                if isinstance(arg, Column):
-                    yield arg.copy()
-                else:
-                    yield arg
-
     def get_table_name(self, name):
         return '%s_%s' % (self.name, name)
 
@@ -38,7 +39,7 @@ class PrefixedTableCollection(object):
         self._metadata = MetaData()
         for attr in dir(self):
             attrval = getattr(self, attr)
-            if isinstance(attrval, PrefixedTableCollection.make_table):
+            if isinstance(attrval, make_table):
                 setattr(self, attr, attrval.make_table(
                     self.get_table_name(attr), self._metadata))
 
