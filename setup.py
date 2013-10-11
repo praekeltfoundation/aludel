@@ -9,6 +9,6 @@ setup(
     long_description=open('README.rst', 'r').read(),
     author='Praekelt Foundation',
     author_email='dev@praekeltfoundation.org',
-    packages=["aludel"],
+    packages=["aludel", "aludel.tests"],
     install_requires=["Twisted", "klein", "sqlalchemy", "alchimia>=0.4"],
 )
