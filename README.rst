@@ -15,6 +15,13 @@ Aludel
 Aludel is a mini-framework for building RESTful APIs. It builds on top of
 `alchimia`_ (for database things) and `klein`_ (for HTTP things).
 
+
+How to use aludel
+-----------------
+
+TODO: Write some documentation for this.
+
+
 About the name
 --------------
 

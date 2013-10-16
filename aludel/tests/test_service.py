@@ -11,7 +11,7 @@ from twisted.web.client import Agent, FileBodyProducer, readBody
 from twisted.web.http_headers import Headers
 from twisted.web.server import Site
 
-from aludel.service import Service, APIError, BadRequestParams
+from aludel import service
 
 
 class FakeRequest(object):
@@ -76,9 +76,9 @@ class TestService(TestCase):
             return listener.loseConnection()
 
     def test_make_service(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:who>')
+            @service.handler('/hello/<string:who>')
             def hello(slf, request, who):
                 return {'hello': who}
 
@@ -93,16 +93,16 @@ class TestService(TestCase):
 
     def test_request_id(self):
         req = FakeRequest()
-        assert Service.get_request_id(req) is None
-        Service.set_request_id(req, 'foo')
-        assert Service.get_request_id(req) == 'foo'
+        assert service.get_request_id(req) is None
+        service.set_request_id(req, 'foo')
+        assert service.get_request_id(req) == 'foo'
 
     def test_get_params_mandatory(self):
         params = {
             'foo': 'hello',
             'bar': 'world',
         }
-        assert Service.get_params(params, ['foo', 'bar']) == {
+        assert service.get_params(params, ['foo', 'bar']) == {
             'foo': 'hello',
             'bar': 'world',
         }
@@ -112,7 +112,7 @@ class TestService(TestCase):
             'foo': 'hello',
             'bar': 'world',
         }
-        err = self.assertRaises(BadRequestParams, Service.get_params,
+        err = self.assertRaises(service.BadRequestParams, service.get_params,
                                 params, ['foo', 'bar', 'baz'])
         assert err.message == (
             "Missing request parameters: 'baz'")
@@ -122,7 +122,7 @@ class TestService(TestCase):
             'foo': 'hello',
             'bar': 'world',
         }
-        err = self.assertRaises(BadRequestParams, Service.get_params,
+        err = self.assertRaises(service.BadRequestParams, service.get_params,
                                 params, [])
         assert err.message == (
             "Unexpected request parameters: 'bar', 'foo'")
@@ -132,29 +132,29 @@ class TestService(TestCase):
             'foo': 'hello',
             'bar': 'world',
         }
-        assert Service.get_params(params, ['foo'], ['bar']) == {
+        assert service.get_params(params, ['foo'], ['bar']) == {
             'foo': 'hello',
             'bar': 'world',
         }
-        assert Service.get_params(params, ['foo'], ['bar', 'baz']) == {
+        assert service.get_params(params, ['foo'], ['bar', 'baz']) == {
             'foo': 'hello',
             'bar': 'world',
         }
 
     def test_get_json_params(self):
         req = FakeRequest(content=json.dumps({'foo': 'hello', 'bar': 'world'}))
-        assert Service.get_json_params(req, ['foo'], ['bar', 'baz']) == {
+        assert service.get_json_params(req, ['foo'], ['bar', 'baz']) == {
             'foo': 'hello',
             'bar': 'world',
         }
 
     def test_get_url_params_no_request_id(self):
         req = FakeRequest(args={'foo': ['hello', 'bye'], 'bar': ['world']})
-        assert Service.get_url_params(req, ['foo'], ['bar', 'baz']) == {
+        assert service.get_url_params(req, ['foo'], ['bar', 'baz']) == {
             'foo': 'hello',
             'bar': 'world',
         }
-        assert Service.get_request_id(req) is None
+        assert service.get_request_id(req) is None
 
     def test_get_url_params_with_request_id(self):
         req = FakeRequest(args={
@@ -162,16 +162,16 @@ class TestService(TestCase):
             'foo': ['hello', 'bye'],
             'bar': ['world'],
         })
-        assert Service.get_url_params(req, ['request_id', 'foo', 'bar']) == {
+        assert service.get_url_params(req, ['request_id', 'foo', 'bar']) == {
             'request_id': 'req0',
             'foo': 'hello',
             'bar': 'world',
         }
-        assert Service.get_request_id(req) == 'req0'
+        assert service.get_request_id(req) == 'req0'
 
     def test_format_response_no_request_id(self):
         req = FakeRequest()
-        response = Service.format_response({'foo': 'bar'}, req)
+        response = service.format_response({'foo': 'bar'}, req)
         assert req.headers == {'content-type': ['application/json']}
         assert json.loads(response) == {
             'request_id': None,
@@ -180,8 +180,8 @@ class TestService(TestCase):
 
     def test_format_response_with_request_id(self):
         req = FakeRequest()
-        Service.set_request_id(req, 'req0')
-        response = Service.format_response({'foo': 'bar'}, req)
+        service.set_request_id(req, 'req0')
+        response = service.format_response({'foo': 'bar'}, req)
         assert req.headers == {'content-type': ['application/json']}
         assert json.loads(response) == {
             'request_id': 'req0',
@@ -190,7 +190,7 @@ class TestService(TestCase):
 
     def test_format_error_no_request_id(self):
         req = FakeRequest()
-        response = Service.format_error(APIError('bad thing'), req)
+        response = service.format_error(service.APIError('bad thing'), req)
         assert req.code == 500
         assert req.headers == {'content-type': ['application/json']}
         assert json.loads(response) == {
@@ -200,8 +200,8 @@ class TestService(TestCase):
 
     def test_format_error_with_request_id(self):
         req = FakeRequest()
-        Service.set_request_id(req, 'req0')
-        response = Service.format_error(APIError('bad thing'), req)
+        service.set_request_id(req, 'req0')
+        response = service.format_error(service.APIError('bad thing'), req)
         assert req.code == 500
         assert req.headers == {'content-type': ['application/json']}
         assert json.loads(response) == {
@@ -211,8 +211,8 @@ class TestService(TestCase):
 
     def test_format_error_with_status_code(self):
         req = FakeRequest()
-        Service.set_request_id(req, 'req0')
-        response = Service.format_error(APIError('teapot', 418), req)
+        service.set_request_id(req, 'req0')
+        response = service.format_error(service.APIError('teapot', 418), req)
         assert req.code == 418
         assert req.headers == {'content-type': ['application/json']}
         assert json.loads(response) == {
@@ -222,9 +222,9 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_simple_get_handler(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:who>')
+            @service.handler('/hello/<string:who>')
             def hello(slf, request, who):
                 return {'hello': who}
 
@@ -237,11 +237,11 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_get_handler_with_params(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello')
+            @service.handler('/hello')
             def hello(slf, request):
-                params = Service.get_url_params(request, ['request_id', 'who'])
+                params = service.get_url_params(request, ['request_id', 'who'])
                 return {'hello': params['who']}
 
         client = yield self.listen(FooService())
@@ -256,11 +256,11 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_get_handler_with_api_error(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:who>')
+            @service.handler('/hello/<string:who>')
             def hello(slf, request, who):
-                raise APIError('teapot', 418)
+                raise service.APIError('teapot', 418)
 
         client = yield self.listen(FooService())
         resp = yield client.get('hello/world', {}, expected_code=418)
@@ -271,9 +271,9 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_get_handler_with_other_error(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:who>')
+            @service.handler('/hello/<string:who>')
             def hello(slf, request, who):
                 raise Exception('oops')
 
@@ -288,14 +288,14 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_custom_error_handler(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:who>')
+            @service.handler('/hello/<string:who>')
             def hello(slf, request, who):
                 raise Exception('oops')
 
             def handle_api_error(slf, failure, request):
-                raise APIError("Internal error: %r" % failure.value)
+                raise service.APIError("Internal error: %r" % failure.value)
 
         client = yield self.listen(FooService())
         resp = yield client.get('hello/world', {}, expected_code=500)
@@ -306,12 +306,12 @@ class TestService(TestCase):
 
     @inlineCallbacks
     def test_simple_put_handler(self):
-        @Service.service
+        @service.service
         class FooService(object):
-            @Service.handler('/hello/<string:request_id>', methods=['PUT'])
+            @service.handler('/hello/<string:request_id>', methods=['PUT'])
             def hello(slf, request, request_id):
-                Service.set_request_id(request, request_id)
-                params = Service.get_json_params(request, ['who'])
+                service.set_request_id(request, request_id)
+                params = service.get_json_params(request, ['who'])
                 return {'hello': params['who']}
 
         client = yield self.listen(FooService())
