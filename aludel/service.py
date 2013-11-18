@@ -24,11 +24,13 @@ __all__ = [
 
 class APIError(Exception):
     code = 500
+    message = None  # Replace BaseException's deprecated message attr.
 
     def __init__(self, message, code=None):
         super(APIError, self).__init__(message)
         if code is not None:
             self.code = code
+        self.message = message
 
 
 class BadRequestParams(APIError):

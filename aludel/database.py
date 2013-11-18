@@ -72,7 +72,7 @@ class PrefixedTableCollection(object):
         def table_missing_errback(f):
             f.trap(OperationalError)
             if 'no such table: ' in str(f.value):
-                raise TableMissingError(f.value.message)
+                raise TableMissingError(f.value.args[0])
             return f
 
         d = self._conn.execute(query, *args, **kw)
