@@ -145,6 +145,10 @@ class CollectionMetadata(_PrefixedTables):
         self._update_metadata({name: metadata_json})
         return metadata_json
 
+    def _none_if_table_missing_eb(self, failure):
+        failure.trap(TableMissingError)
+        return None
+
     def _decode_metadata(self, metadata_json, name):
         if metadata_json is None:
             raise CollectionMissingError(name)
@@ -164,6 +168,7 @@ class CollectionMetadata(_PrefixedTables):
 
     def get_metadata(self, name):
         d = self._get_metadata(name)
+        d.addErrback(self._none_if_table_missing_eb)
         d.addCallback(self._decode_metadata, name)
         return d
 
@@ -196,13 +201,29 @@ class CollectionMetadata(_PrefixedTables):
         metadata_json = json.dumps(metadata)
         if exists:
             return
-        d = self.execute_query(self.collection_metadata.insert().values(
-            name=name, metadata_json=metadata_json))
+        if exists is None:
+            d = self.create()
+        else:
+            d = succeed(None)
+
+        d.addCallback(lambda _: self.execute_query(
+            self.collection_metadata.insert().values(
+                name=name, metadata_json=metadata_json)))
         d.addCallback(lambda result: {name: metadata_json})
         d.addCallback(self._update_metadata)
         return d
 
     def create_collection(self, name, metadata=None):
+        """
+        Create a metadata entry for the named collection.
+
+        :param str name: Name of the collection to check.
+        :param dict metadata:
+            Metadata value to store. If ``None``, an empty dict will be used.
+
+        If the metadata table does not exist, :meth:`CollectionMetadata.create`
+        will be called first.
+        """
         if metadata is None:
             metadata = {}
         d = self.collection_exists(name)
@@ -210,8 +231,23 @@ class CollectionMetadata(_PrefixedTables):
         return d
 
     def collection_exists(self, name):
+        """
+        Check for the existence of the named collection.
+
+        :param str name: Name of the collection to check.
+
+        If there is a metadata entry for ``name``, ``True`` is returned. If
+        there is no metadata entry, ``False`` is returned. If the metadata
+        table does not exist, ``None`` is returned. Both ``False`` and ``None``
+        are truthless values and the difference may be important to the caller.
+
+        :returns:
+            A :class:`Deferred` that fires with ``True``, ``False``, or
+            ``None``.
+        """
         d = self._get_metadata(name)
         d.addCallback(lambda cached_md: False if cached_md is None else True)
+        d.addErrback(self._none_if_table_missing_eb)
         return d
 
 

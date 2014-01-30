@@ -111,6 +111,14 @@ class TestCollectionMetadata(TestCase):
         assert self.successResultOf(has_table_d) is True
         assert self.successResultOf(cmd.exists()) is True
 
+    def test_collection_exists_no_table(self):
+        """
+        .collection_exists() should return None if the metadata table does not
+        exist.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        assert self.successResultOf(cmd.collection_exists('foo')) is None
+
     def test_collection_exists_no_metadata(self):
         """
         .collection_exists() should return False if there is no metadata for
@@ -119,9 +127,6 @@ class TestCollectionMetadata(TestCase):
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         assert self.successResultOf(cmd.collection_exists('foo')) is False
-        self.successResultOf(cmd.create_collection('foo'))
-        assert self.successResultOf(cmd.collection_exists('foo')) is True
-        assert self.successResultOf(cmd.get_metadata('foo')) == {}
 
     def test_collection_exists_with_metadata(self):
         """
@@ -130,10 +135,17 @@ class TestCollectionMetadata(TestCase):
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
-        assert self.successResultOf(cmd.collection_exists('foo')) is False
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
-        assert self.successResultOf(cmd.collection_exists('foo')) is True
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
+        assert self.successResultOf(cmd.collection_exists('foo')) is True
+
+    def test_get_metadata_no_table(self):
+        """
+        .get_metadata() should fail with CollectionMissingError if the metadata
+        table does not exist.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.failureResultOf(cmd.get_metadata('foo'), CollectionMissingError)
 
     def test_get_metadata_missing_collection(self):
         """
@@ -215,6 +227,35 @@ class TestCollectionMetadata(TestCase):
         # the db.
         cmd._metadata_cache.pop('foo')
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
+
+    def test_create_collection_no_table(self):
+        """
+        .create_collection() should call .create() before creating the
+        collection if the metadata table does not exist.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create_collection('foo'))
+        assert cmd._metadata_cache['foo'] == json.dumps({})
+
+    def test_create_collection_no_metadata(self):
+        """
+        .create_collection() should create a collection metadata entry with an
+        empty dict if no metadata is provided.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        self.successResultOf(cmd.create_collection('foo'))
+        assert cmd._metadata_cache['foo'] == json.dumps({})
+
+    def test_create_collection_with_metadata(self):
+        """
+        .create_collection() should create a collection metadata entry with the
+        provided metadata.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
+        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
 
 
 class TestTableCollection(TestCase):
