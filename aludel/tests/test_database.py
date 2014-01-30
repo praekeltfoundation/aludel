@@ -4,11 +4,71 @@ from sqlalchemy.types import UserDefinedType
 from twisted.trial.unittest import TestCase
 
 from aludel.database import (
-    get_engine, make_table, CollectionMetadata, TableCollection,
-    CollectionMissingError, TableMissingError,
+    get_engine, make_table, CollectionMissingError, TableMissingError,
+    _PrefixedTables, CollectionMetadata, TableCollection,
 )
 
 from .doubles import FakeReactorThreads
+
+
+class Test_PrefixedTables(TestCase):
+    def setUp(self):
+        self.engine = get_engine("sqlite://", reactor=FakeReactorThreads())
+        self.conn = self.successResultOf(self.engine.connect())
+
+    def tearDown(self):
+        self.successResultOf(self.conn.close())
+
+    def test_get_table_name_not_implemented(self):
+        """
+        .get_table_name() should raise a NotImplementedError.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        err = self.assertRaises(
+            NotImplementedError, my_tables.get_table_name, 'foo')
+        assert err.args[0] == "_PrefixedTables should not be used directly."
+
+    def test_exists_not_implemented(self):
+        """
+        .exists() should raise a NotImplementedError.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        err = self.assertRaises(NotImplementedError, my_tables.exists)
+        assert err.args[0] == "_PrefixedTables should not be used directly."
+
+    def test_execute_happy(self):
+        """
+        .execute_query() should query the database and return a result.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        result = self.successResultOf(my_tables.execute_query("SELECT 42;"))
+        rows = self.successResultOf(result.fetchall())
+        assert rows == [(42,)]
+
+    def test_execute_no_table(self):
+        """
+        .execute_query() should fail with TableMissingError if asked to query a
+        table that does not exist.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        self.failureResultOf(
+            my_tables.execute_query("SELECT * FROM foo;"), TableMissingError)
+
+    def test_execute_error(self):
+        """
+        .execute_query() should fail if given an invalid query.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        self.failureResultOf(my_tables.execute_query("SELECT ;;"))
+
+    def test_execute_fetchall(self):
+        """
+        .execute_fetchall() should query the database and return all rows from
+        the result.
+        """
+        my_tables = _PrefixedTables("prefix", self.conn)
+        rows = self.successResultOf(my_tables.execute_fetchall("SELECT 42;"))
+        assert rows == [(42,)]
 
 
 class TestCollectionMetadata(TestCase):
@@ -81,7 +141,7 @@ class TestCollectionMetadata(TestCase):
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
-        self.assertFailure(cmd.get_metadata('foo'), CollectionMissingError)
+        self.failureResultOf(cmd.get_metadata('foo'), CollectionMissingError)
 
     def test_get_metadata_from_cache(self):
         """
@@ -127,7 +187,19 @@ class TestTableCollection(TestCase):
     def tearDown(self):
         self.successResultOf(self.conn.close())
 
+    def _get_cmd(self, collection_cls):
+        """
+        Create and return a CollectionMetadata instance for collection_cls.
+        """
+        cmd = CollectionMetadata(collection_cls.collection_type(), self.conn)
+        self.successResultOf(cmd.create())
+        return cmd
+
     def test_collection_type_class_name(self):
+        """
+        .collection_type() should return the class name if the COLLECTION_TYPE
+        attr is unset.
+        """
         class MyTables(TableCollection):
             pass
 
@@ -136,6 +208,9 @@ class TestTableCollection(TestCase):
         assert my_tables.collection_type() == 'MyTables'
 
     def test_collection_type_explicit_name(self):
+        """
+        .collection_type() should return the COLLECTION_TYPE attr if set.
+        """
         class MyTables(TableCollection):
             COLLECTION_TYPE = 'YourTables'
 
@@ -144,6 +219,10 @@ class TestTableCollection(TestCase):
         assert my_tables.collection_type() == 'YourTables'
 
     def test_get_table_name(self):
+        """
+        .get_table_name() should build an appropriate table name from the
+        collection type, collection name, and table name.
+        """
         class MyTables(TableCollection):
             pass
 
@@ -151,6 +230,11 @@ class TestTableCollection(TestCase):
         assert my_tables.get_table_name("thing") == "MyTables_prefix_thing"
 
     def test_make_table(self):
+        """
+        Class attributes built by make_table() should be replaced by instance
+        attributes that are SQLAlchemy Table instances with the correct table
+        names.
+        """
         class MyTables(TableCollection):
             tbl = make_table(
                 Column("id", Integer(), primary_key=True),
@@ -170,7 +254,11 @@ class TestTableCollection(TestCase):
         assert my_tables_2.tbl.name == 'MyTables_prefix2_tbl'
         assert len(my_tables_2.tbl.c) == 3
 
-    def test_create_tables(self):
+    def test_create_tables_with_metadata(self):
+        """
+        .create_tables() should create the tables belonging to the collection
+        and set metadata.
+        """
         class MyTables(TableCollection):
             tbl1 = make_table(
                 Column("id", Integer(), primary_key=True),
@@ -182,8 +270,40 @@ class TestTableCollection(TestCase):
                 Column("other_value", String()),
             )
 
-        my_tables = MyTables("prefix", self.conn)
-        self.successResultOf(my_tables._collection_metadata.create())
+        cmd = self._get_cmd(MyTables)
+        my_tables = MyTables("foo", self.conn, cmd)
+
+        # Check that the tables don't already exist.
+        assert self.successResultOf(my_tables.exists()) is False
+        self.failureResultOf(self.conn.execute(my_tables.tbl1.select()))
+        self.failureResultOf(self.conn.execute(my_tables.tbl2.select()))
+
+        # Create the tables and check that they exist.
+        self.successResultOf(my_tables.create_tables(metadata={'bar': 'baz'}))
+        assert self.successResultOf(my_tables.exists()) is True
+        self.successResultOf(self.conn.execute(my_tables.tbl1.select()))
+        self.successResultOf(self.conn.execute(my_tables.tbl2.select()))
+        assert self.successResultOf(cmd.get_metadata("foo")) == {'bar': 'baz'}
+
+    def test_create_tables_no_metadata(self):
+        """
+        .create_tables() should create the tables belonging to the collection
+        and set metadata. If no metadata is provided, an empty dict should be
+        used.
+        """
+        class MyTables(TableCollection):
+            tbl1 = make_table(
+                Column("id", Integer(), primary_key=True),
+                Column("value", String()),
+            )
+
+            tbl2 = make_table(
+                Column("id", Integer(), primary_key=True),
+                Column("other_value", String()),
+            )
+
+        cmd = self._get_cmd(MyTables)
+        my_tables = MyTables("foo", self.conn, cmd)
 
         # Check that the tables don't already exist.
         assert self.successResultOf(my_tables.exists()) is False
@@ -195,11 +315,35 @@ class TestTableCollection(TestCase):
         assert self.successResultOf(my_tables.exists()) is True
         self.successResultOf(self.conn.execute(my_tables.tbl1.select()))
         self.successResultOf(self.conn.execute(my_tables.tbl2.select()))
+        assert self.successResultOf(cmd.get_metadata("foo")) == {}
 
-        # Create the tables again and check that nothing explodes.
-        self.successResultOf(my_tables.create_tables())
+    def test_create_tables_already_exists(self):
+        """
+        .create_tables() should do nothing if the tables already exist.
+        """
+        class MyTables(TableCollection):
+            tbl = make_table(
+                Column("id", Integer(), primary_key=True),
+                Column("value", String()),
+            )
+
+        cmd = self._get_cmd(MyTables)
+        my_tables = MyTables("foo", self.conn, cmd)
+
+        # Create the tables and check that they exist.
+        self.successResultOf(my_tables.create_tables(metadata={'bar': 'baz'}))
+        assert self.successResultOf(my_tables.exists()) is True
+        assert self.successResultOf(cmd.get_metadata("foo")) == {'bar': 'baz'}
+
+        # Create the tables again and check that nothing changes.
+        self.successResultOf(my_tables.create_tables(metadata={'a': 'b'}))
+        assert self.successResultOf(my_tables.exists()) is True
+        assert self.successResultOf(cmd.get_metadata("foo")) == {'bar': 'baz'}
 
     def test_create_tables_error(self):
+        """
+        .create_tables() should fail if the tables can't be created.
+        """
         class BrokenType(UserDefinedType):
             def get_col_spec(self):
                 return "BROKEN;;"
@@ -212,47 +356,3 @@ class TestTableCollection(TestCase):
 
         my_tables = MyTables("prefix", self.conn)
         self.failureResultOf(my_tables.create_tables())
-
-    def test_execute_happy(self):
-        class MyTables(TableCollection):
-            tbl = make_table(
-                Column("id", Integer(), primary_key=True),
-                Column("value", String()),
-            )
-
-        my_tables = MyTables("prefix", self.conn)
-        result = self.successResultOf(my_tables.execute_query("SELECT 42;"))
-        rows = self.successResultOf(result.fetchall())
-        assert rows == [(42,)]
-
-    def test_execute_no_table(self):
-        class MyTables(TableCollection):
-            tbl = make_table(
-                Column("id", Integer(), primary_key=True),
-                Column("value", String()),
-            )
-
-        my_tables = MyTables("prefix", self.conn)
-        self.failureResultOf(my_tables.execute_query(
-            my_tables.tbl.select()), TableMissingError)
-
-    def test_execute_error(self):
-        class MyTables(TableCollection):
-            tbl = make_table(
-                Column("id", Integer(), primary_key=True),
-                Column("value", String()),
-            )
-
-        my_tables = MyTables("prefix", self.conn)
-        self.failureResultOf(my_tables.execute_query("SELECT ;;"))
-
-    def test_execute_fetchall(self):
-        class MyTables(TableCollection):
-            tbl = make_table(
-                Column("id", Integer(), primary_key=True),
-                Column("value", String()),
-            )
-
-        my_tables = MyTables("prefix", self.conn)
-        rows = self.successResultOf(my_tables.execute_fetchall("SELECT 42;"))
-        assert rows == [(42,)]
