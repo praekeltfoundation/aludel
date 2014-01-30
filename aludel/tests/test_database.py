@@ -18,12 +18,28 @@ class TestPrefixedTableCollection(TestCase):
     def tearDown(self):
         self.successResultOf(self.conn.close())
 
+    def test_collection_type_class_name(self):
+        class MyTables(PrefixedTableCollection):
+            pass
+
+        assert MyTables.collection_type() == 'MyTables'
+        my_tables = MyTables("prefix", connection=None)
+        assert my_tables.collection_type() == 'MyTables'
+
+    def test_collection_type_explicit_name(self):
+        class MyTables(PrefixedTableCollection):
+            COLLECTION_TYPE = 'YourTables'
+
+        assert MyTables.collection_type() == 'YourTables'
+        my_tables = MyTables("prefix", connection=None)
+        assert my_tables.collection_type() == 'YourTables'
+
     def test_get_table_name(self):
         class MyTables(PrefixedTableCollection):
             pass
 
         my_tables = MyTables("prefix", connection=None)
-        assert my_tables.get_table_name("thing") == "prefix_thing"
+        assert my_tables.get_table_name("thing") == "MyTables_prefix_thing"
 
     def test_make_table(self):
         class MyTables(PrefixedTableCollection):
@@ -36,13 +52,13 @@ class TestPrefixedTableCollection(TestCase):
 
         my_tables_1 = MyTables("prefix1", self.conn)
         assert isinstance(my_tables_1.tbl, Table)
-        assert my_tables_1.tbl.name == 'prefix1_tbl'
+        assert my_tables_1.tbl.name == 'MyTables_prefix1_tbl'
         assert len(my_tables_1.tbl.c) == 3
 
         # Make another instance to check that things aren't bound improperly.
         my_tables_2 = MyTables("prefix2", self.conn)
         assert isinstance(my_tables_2.tbl, Table)
-        assert my_tables_2.tbl.name == 'prefix2_tbl'
+        assert my_tables_2.tbl.name == 'MyTables_prefix2_tbl'
         assert len(my_tables_2.tbl.c) == 3
 
     def test_create_tables(self):

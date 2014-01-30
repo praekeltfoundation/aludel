@@ -30,8 +30,16 @@ class make_table(object):
 
 
 class PrefixedTableCollection(object):
-    def get_table_name(self, name):
-        return '%s_%s' % (self.name, name)
+    """
+    Collection of database tables sharing a common prefix.
+
+    Each table is prefixed with the collection type and name.
+
+    The collection type defaults to the class name, but the
+    :attr:`COLLECTION_TYPE` class attribute may be set to override this.
+    """
+
+    COLLECTION_TYPE = None
 
     def __init__(self, name, connection):
         self.name = name
@@ -43,14 +51,30 @@ class PrefixedTableCollection(object):
                 setattr(self, attr, attrval.make_table(
                     self.get_table_name(attr), self._metadata))
 
+    @classmethod
+    def collection_type(cls):
+        ctype = cls.COLLECTION_TYPE
+        if ctype is None:
+            ctype = cls.__name__
+        return ctype
+
+    def get_table_name(self, name):
+        return '%s_%s_%s' % (self.collection_type(), self.name, name)
+
     def _create_table(self, trx, table):
         # This works around alchimia's current inability to create tables only
         # if they don't already exist.
 
+        table_exists_err_templates = [
+            'table %(name)s already exists',
+            'table "%(name)s" already exists',
+        ]
+
         def table_exists_errback(f):
             f.trap(OperationalError)
-            if 'table %s already exists' % (table.name,) in str(f.value):
-                return None
+            for err_template in table_exists_err_templates:
+                if err_template % {'name': table.name} in str(f.value):
+                    return None
             return f
 
         d = self._conn.execute(CreateTable(table))
