@@ -19,13 +19,42 @@ class TestCollectionMetadata(TestCase):
     def tearDown(self):
         self.successResultOf(self.conn.close())
 
-    def test_create(self):
+    def test_create_new(self):
+        """
+        .create() should create the appropriately named table.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
+        has_table_d = self.engine.has_table(cmd.collection_metadata.name)
+        assert self.successResultOf(has_table_d) is False
         assert self.successResultOf(cmd.exists()) is False
+
         self.successResultOf(cmd.create())
+        has_table_d = self.engine.has_table(cmd.collection_metadata.name)
+        assert self.successResultOf(has_table_d) is True
         assert self.successResultOf(cmd.exists()) is True
 
-    def test_collection_no_metadata(self):
+    def test_create_exists(self):
+        """
+        .create() should do nothing if the table already exists.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+
+        self.successResultOf(cmd.create())
+        has_table_d = self.engine.has_table(cmd.collection_metadata.name)
+        assert self.successResultOf(has_table_d) is True
+        assert self.successResultOf(cmd.exists()) is True
+
+        # Create again, assert that everything still exists.
+        self.successResultOf(cmd.create())
+        has_table_d = self.engine.has_table(cmd.collection_metadata.name)
+        assert self.successResultOf(has_table_d) is True
+        assert self.successResultOf(cmd.exists()) is True
+
+    def test_collection_exists_no_metadata(self):
+        """
+        .collection_exists() should return False if there is no metadata for
+        the provided name.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         assert self.successResultOf(cmd.collection_exists('foo')) is False
@@ -33,7 +62,11 @@ class TestCollectionMetadata(TestCase):
         assert self.successResultOf(cmd.collection_exists('foo')) is True
         assert self.successResultOf(cmd.get_metadata('foo')) == {}
 
-    def test_collection_with_metadata(self):
+    def test_collection_exists_with_metadata(self):
+        """
+        .collection_exists() should return True if there is metadata for the
+        provided name.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         assert self.successResultOf(cmd.collection_exists('foo')) is False
@@ -42,16 +75,27 @@ class TestCollectionMetadata(TestCase):
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
     def test_get_metadata_missing_collection(self):
+        """
+        .get_metadata() should fail with CollectionMissingError if there is no
+        metadata for the provided name.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.assertFailure(cmd.get_metadata('foo'), CollectionMissingError)
 
     def test_get_metadata_from_cache(self):
+        """
+        .get_metadata() should return metadata from the local cache if present.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         cmd._metadata_cache['foo'] = {'bar': 'baz'}
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
     def test_get_metadata_no_cache(self):
+        """
+        .get_metadata() should populate the local cache entry from the database
+        if necessary.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
@@ -60,12 +104,19 @@ class TestCollectionMetadata(TestCase):
         assert cmd._metadata_cache['foo'] == {'bar': 'baz'}
 
     def test_set_metadata(self):
+        """
+        .set_metadata() should update the database and the local cache.
+        """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo'))
         assert cmd._metadata_cache['foo'] == {}
         self.successResultOf(cmd.set_metadata('foo', {'bar': 'baz'}))
         assert cmd._metadata_cache['foo'] == {'bar': 'baz'}
+        # Clear the local cache and assert that the new version is fetched from
+        # the db.
+        cmd._metadata_cache.pop('foo')
+        assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
 
 class TestTableCollection(TestCase):
