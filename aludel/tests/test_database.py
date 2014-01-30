@@ -1,6 +1,7 @@
+import json
+
 from sqlalchemy import Table, Column, Integer, String, UniqueConstraint
 from sqlalchemy.types import UserDefinedType
-
 from twisted.trial.unittest import TestCase
 
 from aludel.database import (
@@ -148,7 +149,7 @@ class TestCollectionMetadata(TestCase):
         .get_metadata() should return metadata from the local cache if present.
         """
         cmd = CollectionMetadata('MyTables', self.conn)
-        cmd._metadata_cache['foo'] = {'bar': 'baz'}
+        cmd._metadata_cache['foo'] = json.dumps({'bar': 'baz'})
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
     def test_get_metadata_no_cache(self):
@@ -161,7 +162,7 @@ class TestCollectionMetadata(TestCase):
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
         cmd._metadata_cache.pop('foo')
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
-        assert cmd._metadata_cache['foo'] == {'bar': 'baz'}
+        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
 
     def test_get_all_metadata_no_cache(self):
         """
@@ -175,7 +176,8 @@ class TestCollectionMetadata(TestCase):
         cmd._metadata_cache.clear()
         metadata = self.successResultOf(cmd.get_all_metadata())
         assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
-        assert cmd._metadata_cache == metadata
+        assert cmd._metadata_cache == dict(
+            (k, json.dumps(v)) for k, v in metadata.iteritems())
 
     def test_get_all_metadata_extra_cache(self):
         """
@@ -185,10 +187,19 @@ class TestCollectionMetadata(TestCase):
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'a': 1}))
         self.successResultOf(cmd.create_collection('bar', {'b': 2}))
-        cmd._metadata_cache['baz'] = {'c': 3}
+        cmd._metadata_cache['baz'] = json.dumps({'c': 3})
         metadata = self.successResultOf(cmd.get_all_metadata())
         assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
-        assert cmd._metadata_cache == metadata
+        assert cmd._metadata_cache == dict(
+            (k, json.dumps(v)) for k, v in metadata.iteritems())
+
+    def test__decode_all_metadata_with_none(self):
+        """
+        ._decode_all_metadata() should ignore empty metadata entries.
+        """
+        cmd = CollectionMetadata('MyTables', None)
+        metadata_cache = {'foo': json.dumps({'a': 1}), 'bar': None}
+        assert cmd._decode_all_metadata(metadata_cache) == {'foo': {'a': 1}}
 
     def test_set_metadata(self):
         """
@@ -197,9 +208,9 @@ class TestCollectionMetadata(TestCase):
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo'))
-        assert cmd._metadata_cache['foo'] == {}
+        assert cmd._metadata_cache['foo'] == json.dumps({})
         self.successResultOf(cmd.set_metadata('foo', {'bar': 'baz'}))
-        assert cmd._metadata_cache['foo'] == {'bar': 'baz'}
+        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
         # Clear the local cache and assert that the new version is fetched from
         # the db.
         cmd._metadata_cache.pop('foo')

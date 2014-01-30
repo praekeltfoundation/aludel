@@ -130,27 +130,27 @@ class CollectionMetadata(_PrefixedTables):
         if clear:
             cache.clear()
         cache.update(new_metadata)
-        return cache.copy()
+        return cache
 
     def _rows_to_dict(self, rows):
         metadata_dict = {}
         for name, metadata_json in rows:
-            metadata_dict[name] = json.loads(metadata_json)
+            metadata_dict[name] = metadata_json
         return metadata_dict
 
     def _add_row_to_metadata(self, row, name):
-        metadata = None
+        metadata_json = None
         if row is not None:
-            metadata = json.loads(row.metadata_json)
-        self._update_metadata({name: metadata})
-        return metadata
+            metadata_json = row.metadata_json
+        self._update_metadata({name: metadata_json})
+        return metadata_json
 
-    def _raise_if_none(self, metadata, name):
-        if metadata is None:
+    def _decode_metadata(self, metadata_json, name):
+        if metadata_json is None:
             raise CollectionMissingError(name)
-        return metadata
+        return json.loads(metadata_json)
 
-    def get_metadata(self, name):
+    def _get_metadata(self, name):
         cache = self._metadata_cache
         if name not in cache:
             d = self.execute_query(
@@ -160,31 +160,45 @@ class CollectionMetadata(_PrefixedTables):
             d.addCallback(self._add_row_to_metadata, name)
         else:
             d = succeed(cache[name])
-        d.addCallback(self._raise_if_none, name)
         return d
+
+    def get_metadata(self, name):
+        d = self._get_metadata(name)
+        d.addCallback(self._decode_metadata, name)
+        return d
+
+    def _decode_all_metadata(self, all_metadata):
+        metadata = {}
+        for name, metadata_json in all_metadata.iteritems():
+            if metadata_json is not None:
+                metadata[name] = json.loads(metadata_json)
+        return metadata
 
     def get_all_metadata(self):
         d = self.execute_fetchall(self.collection_metadata.select())
         d.addCallback(self._rows_to_dict)
         d.addCallback(self._update_metadata, clear=True)
+        d.addCallback(self._decode_all_metadata)
         return d
 
     def set_metadata(self, name, metadata):
+        metadata_json = json.dumps(metadata)
         self._metadata_cache.pop(name, None)
         d = self.execute_query(
             self.collection_metadata.update().where(
                 self.collection_metadata.c.name == name,
-            ).values(metadata_json=json.dumps(metadata)))
-        d.addCallback(lambda result: {name: metadata})
+            ).values(metadata_json=metadata_json))
+        d.addCallback(lambda result: {name: metadata_json})
         d.addCallback(self._update_metadata)
         return d
 
     def _create_collection(self, exists, name, metadata):
+        metadata_json = json.dumps(metadata)
         if exists:
             return
         d = self.execute_query(self.collection_metadata.insert().values(
-            name=name, metadata_json=json.dumps(metadata)))
-        d.addCallback(lambda result: {name: metadata})
+            name=name, metadata_json=metadata_json))
+        d.addCallback(lambda result: {name: metadata_json})
         d.addCallback(self._update_metadata)
         return d
 
@@ -196,13 +210,8 @@ class CollectionMetadata(_PrefixedTables):
         return d
 
     def collection_exists(self, name):
-        d = self.get_metadata(name)
-
-        def missing_to_false_eb(f):
-            f.trap(CollectionMissingError)
-            return False
-
-        d.addCallbacks(lambda _: True, missing_to_false_eb)
+        d = self._get_metadata(name)
+        d.addCallback(lambda cached_md: False if cached_md is None else True)
         return d
 
 
