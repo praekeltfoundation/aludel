@@ -256,6 +256,21 @@ class TestTableCollection(TestCase):
         my_tables = MyTables("prefix", connection=None)
         assert my_tables.collection_type() == 'YourTables'
 
+    def test_init_uses_provided_collection_metadata(self):
+        """
+        TableCollection should use the collection_metadata it's given, if any.
+        """
+        cmd = self._get_cmd(TableCollection)
+        my_tables = TableCollection("foo", None, collection_metadata=cmd)
+        assert my_tables._collection_metadata is cmd
+
+    def test_init_uses_builds_collection_metadata(self):
+        """
+        TableCollection should build a collection_metadata if none is given.
+        """
+        my_tables = TableCollection("foo", None)
+        assert isinstance(my_tables._collection_metadata, CollectionMetadata)
+
     def test_get_table_name(self):
         """
         .get_table_name() should build an appropriate table name from the
