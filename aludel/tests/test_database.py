@@ -356,3 +356,37 @@ class TestTableCollection(TestCase):
 
         my_tables = MyTables("prefix", self.conn)
         self.failureResultOf(my_tables.create_tables())
+
+    def test_get_metadata(self):
+        """
+        .get_metadata() should fetch the metadata for this collection.
+        """
+        class MyTables(TableCollection):
+            tbl = make_table(
+                Column("id", Integer(), primary_key=True),
+                Column("value", String()),
+            )
+
+        my_tables = MyTables("prefix", self.conn)
+        self.successResultOf(my_tables._collection_metadata.create())
+        self.successResultOf(my_tables.create_tables(metadata={'bar': 'baz'}))
+
+        assert self.successResultOf(my_tables.get_metadata()) == {'bar': 'baz'}
+
+    def test_set_metadata(self):
+        """
+        .set_metadata() should update the metadata for this collection.
+        """
+        class MyTables(TableCollection):
+            tbl = make_table(
+                Column("id", Integer(), primary_key=True),
+                Column("value", String()),
+            )
+
+        my_tables = MyTables("prefix", self.conn)
+        self.successResultOf(my_tables._collection_metadata.create())
+        self.successResultOf(my_tables.create_tables())
+
+        assert self.successResultOf(my_tables.get_metadata()) == {}
+        self.successResultOf(my_tables.set_metadata({'bar': 'baz'}))
+        assert self.successResultOf(my_tables.get_metadata()) == {'bar': 'baz'}

@@ -229,3 +229,9 @@ class TableCollection(_PrefixedTables):
         d.addCallback(lambda _: self._collection_metadata.create_collection(
             self.name, metadata))
         return d
+
+    def get_metadata(self):
+        return self._collection_metadata.get_metadata(self.name)
+
+    def set_metadata(self, metadata):
+        return self._collection_metadata.set_metadata(self.name, metadata)
