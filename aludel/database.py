@@ -126,9 +126,17 @@ class CollectionMetadata(_PrefixedTables):
         return self._create_tables()
 
     def _update_metadata(self, new_metadata, clear=False):
+        cache = self._metadata_cache
         if clear:
-            self._metadata_cache.clear()
-        self._metadata_cache.update(new_metadata)
+            cache.clear()
+        cache.update(new_metadata)
+        return cache.copy()
+
+    def _rows_to_dict(self, rows):
+        metadata_dict = {}
+        for name, metadata_json in rows:
+            metadata_dict[name] = json.loads(metadata_json)
+        return metadata_dict
 
     def _add_row_to_metadata(self, row, name):
         metadata = None
@@ -153,6 +161,12 @@ class CollectionMetadata(_PrefixedTables):
         else:
             d = succeed(cache[name])
         d.addCallback(self._raise_if_none, name)
+        return d
+
+    def get_all_metadata(self):
+        d = self.execute_fetchall(self.collection_metadata.select())
+        d.addCallback(self._rows_to_dict)
+        d.addCallback(self._update_metadata, clear=True)
         return d
 
     def set_metadata(self, name, metadata):

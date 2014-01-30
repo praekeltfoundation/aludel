@@ -163,6 +163,33 @@ class TestCollectionMetadata(TestCase):
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
         assert cmd._metadata_cache['foo'] == {'bar': 'baz'}
 
+    def test_get_all_metadata_no_cache(self):
+        """
+        .get_all_metadata() should populate the local cache from the database
+        and return a copy of all the metadata.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        self.successResultOf(cmd.create_collection('foo', {'a': 1}))
+        self.successResultOf(cmd.create_collection('bar', {'b': 2}))
+        cmd._metadata_cache.clear()
+        metadata = self.successResultOf(cmd.get_all_metadata())
+        assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
+        assert cmd._metadata_cache == metadata
+
+    def test_get_all_metadata_extra_cache(self):
+        """
+        .get_all_metadata() should remove extra entries from the local cache.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        self.successResultOf(cmd.create_collection('foo', {'a': 1}))
+        self.successResultOf(cmd.create_collection('bar', {'b': 2}))
+        cmd._metadata_cache['baz'] = {'c': 3}
+        metadata = self.successResultOf(cmd.get_all_metadata())
+        assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
+        assert cmd._metadata_cache == metadata
+
     def test_set_metadata(self):
         """
         .set_metadata() should update the database and the local cache.
