@@ -73,8 +73,10 @@ class _PrefixedTables(object):
 
         def table_exists_errback(f):
             for err_template in table_exists_err_templates:
-                if err_template % {'name': table.name} in str(f.value):
-                    return None
+                # Sometimes the table name is lowercased.
+                for name in (table.name, table.name.lower()):
+                    if err_template % {'name': name} in str(f.value):
+                        return None
             return f
 
         d = self._conn.execute(CreateTable(table))
