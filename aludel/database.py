@@ -106,7 +106,7 @@ class CollectionMetadata(_PrefixedTables):
     """
 
     collection_metadata = make_table(
-        Column("name", String(256), primary_key=True),
+        Column("name", String(255), primary_key=True),
         Column("metadata_json", Text(), nullable=False),
     )
 
