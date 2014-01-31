@@ -5,8 +5,8 @@ from sqlalchemy.types import UserDefinedType
 from twisted.trial.unittest import TestCase
 
 from aludel.database import (
-    get_engine, make_table, CollectionMissingError, TableMissingError,
-    _PrefixedTables, CollectionMetadata, TableCollection,
+    get_engine, make_table, CollectionMissingError, _PrefixedTables,
+    CollectionMetadata, TableCollection,
 )
 
 from .doubles import FakeReactorThreads
