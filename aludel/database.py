@@ -2,7 +2,6 @@ import json
 
 from alchimia import TWISTED_STRATEGY
 from sqlalchemy import MetaData, Table, Column, String, create_engine
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.schema import CreateTable
 from twisted.internet.defer import succeed
 
@@ -63,10 +62,11 @@ class _PrefixedTables(object):
         table_exists_err_templates = [
             'table %(name)s already exists',
             'table "%(name)s" already exists',
+            'relation %(name)s already exists',
+            'relation "%(name)s" already exists',
         ]
 
         def table_exists_errback(f):
-            f.trap(OperationalError)
             for err_template in table_exists_err_templates:
                 if err_template % {'name': table.name} in str(f.value):
                     return None

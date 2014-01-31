@@ -1,6 +1,9 @@
 import json
+import os
 
-from sqlalchemy import Table, Column, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Table, Column, Integer, String, UniqueConstraint, MetaData
+)
 from sqlalchemy.types import UserDefinedType
 from twisted.trial.unittest import TestCase
 
@@ -12,14 +15,28 @@ from aludel.database import (
 from .doubles import FakeReactorThreads
 
 
-class Test_PrefixedTables(TestCase):
+class DatabaseTestCase(TestCase):
     def setUp(self):
-        self.engine = get_engine("sqlite://", reactor=FakeReactorThreads())
+        connection_string = os.environ.get(
+            "ALUDEL_TEST_CONNECTION_STRING", "sqlite://")
+        self.engine = get_engine(
+            connection_string, reactor=FakeReactorThreads())
+        self._drop_tables()
         self.conn = self.successResultOf(self.engine.connect())
 
     def tearDown(self):
         self.successResultOf(self.conn.close())
+        self._drop_tables()
+        assert self.successResultOf(self.engine.table_names()) == []
 
+    def _drop_tables(self):
+        # NOTE: This is a blocking operation!
+        md = MetaData(bind=self.engine._engine)
+        md.reflect()
+        md.drop_all()
+
+
+class Test_PrefixedTables(DatabaseTestCase):
     def test_get_table_name_not_implemented(self):
         """
         .get_table_name() should raise a NotImplementedError.
@@ -72,14 +89,7 @@ class Test_PrefixedTables(TestCase):
         assert err.args[0] == "_PrefixedTables should not be used directly."
 
 
-class TestCollectionMetadata(TestCase):
-    def setUp(self):
-        self.engine = get_engine("sqlite://", reactor=FakeReactorThreads())
-        self.conn = self.successResultOf(self.engine.connect())
-
-    def tearDown(self):
-        self.successResultOf(self.conn.close())
-
+class TestCollectionMetadata(DatabaseTestCase):
     def test_create_new(self):
         """
         .create() should create the appropriately named table.
@@ -258,14 +268,7 @@ class TestCollectionMetadata(TestCase):
         assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
 
 
-class TestTableCollection(TestCase):
-    def setUp(self):
-        self.engine = get_engine("sqlite://", reactor=FakeReactorThreads())
-        self.conn = self.successResultOf(self.engine.connect())
-
-    def tearDown(self):
-        self.successResultOf(self.conn.close())
-
+class TestTableCollection(DatabaseTestCase):
     def _get_cmd(self, collection_cls):
         """
         Create and return a CollectionMetadata instance for collection_cls.
