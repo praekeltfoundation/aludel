@@ -1,7 +1,7 @@
 import json
 
 from alchimia import TWISTED_STRATEGY
-from sqlalchemy import MetaData, Table, Column, String, create_engine
+from sqlalchemy import MetaData, Table, Column, String, Text, create_engine
 from sqlalchemy.schema import CreateTable
 from twisted.internet.defer import succeed
 
@@ -106,8 +106,8 @@ class CollectionMetadata(_PrefixedTables):
     """
 
     collection_metadata = make_table(
-        Column("name", String(), primary_key=True),
-        Column("metadata_json", String(), nullable=False),
+        Column("name", String(1024), primary_key=True),
+        Column("metadata_json", Text(), nullable=False),
     )
 
     _metadata_cache_dict = None
