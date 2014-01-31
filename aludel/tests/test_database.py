@@ -335,8 +335,8 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
-                Column("other_value", String()),
+                Column("value", String(255)),
+                Column("other_value", String(255)),
                 UniqueConstraint("value", "other_value"),
             )
 
@@ -359,12 +359,12 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl1 = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
+                Column("value", String(255)),
             )
 
             tbl2 = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("other_value", String()),
+                Column("other_value", String(255)),
             )
 
         cmd = self._get_cmd(MyTables)
@@ -391,12 +391,12 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl1 = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
+                Column("value", String(255)),
             )
 
             tbl2 = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("other_value", String()),
+                Column("other_value", String(255)),
             )
 
         cmd = self._get_cmd(MyTables)
@@ -421,7 +421,7 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
+                Column("value", String(255)),
             )
 
         cmd = self._get_cmd(MyTables)
@@ -461,7 +461,7 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
+                Column("value", String(255)),
             )
 
         my_tables = MyTables("prefix", self.conn)
@@ -477,7 +477,7 @@ class TestTableCollection(DatabaseTestCase):
         class MyTables(TableCollection):
             tbl = make_table(
                 Column("id", Integer(), primary_key=True),
-                Column("value", String()),
+                Column("value", String(255)),
             )
 
         my_tables = MyTables("prefix", self.conn)
