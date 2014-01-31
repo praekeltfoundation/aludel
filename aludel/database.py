@@ -60,10 +60,15 @@ class _PrefixedTables(object):
         # if they don't already exist.
 
         table_exists_err_templates = [
+            # SQLite
             'table %(name)s already exists',
             'table "%(name)s" already exists',
+            # PostgreSQL
             'relation %(name)s already exists',
             'relation "%(name)s" already exists',
+            # MySQL
+            'Table %(name)s already exists',
+            "Table '%(name)s' already exists",
         ]
 
         def table_exists_errback(f):
