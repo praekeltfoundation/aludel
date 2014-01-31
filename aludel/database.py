@@ -35,6 +35,12 @@ class make_table(object):
                 yield arg
 
 
+def _false_to_error(result, err):
+    if not result:
+        raise err
+    return result
+
+
 class _PrefixedTables(object):
     def __init__(self, name, connection):
         self.name = name
@@ -80,15 +86,12 @@ class _PrefixedTables(object):
         raise NotImplementedError(
             "_PrefixedTables should not be used directly.")
 
-    def execute_query(self, query, *args, **kw):
-        def table_missing_errback(f):
-            f.trap(OperationalError)
-            if 'no such table: ' in str(f.value):
-                raise TableMissingError(f.value.args[0])
-            return f
+    def _execute_query(self, query, *args, **kw):
+        return self._conn.execute(query, *args, **kw)
 
-        d = self._conn.execute(query, *args, **kw)
-        return d.addErrback(table_missing_errback)
+    def execute_query(self, query, *args, **kw):
+        raise NotImplementedError(
+            "_PrefixedTables should not be used directly.")
 
     def execute_fetchall(self, query, *args, **kw):
         d = self.execute_query(query, *args, **kw)
@@ -124,6 +127,13 @@ class CollectionMetadata(_PrefixedTables):
 
     def create(self):
         return self._create_tables()
+
+    def execute_query(self, query, *args, **kw):
+        d = self.exists()
+        d.addCallback(
+            _false_to_error, TableMissingError(self.collection_metadata.name))
+        d.addCallback(lambda _: self._execute_query(query, *args, **kw))
+        return d
 
     def _update_metadata(self, new_metadata, clear=False):
         cache = self._metadata_cache
@@ -294,3 +304,9 @@ class TableCollection(_PrefixedTables):
 
     def set_metadata(self, metadata):
         return self._collection_metadata.set_metadata(self.name, metadata)
+
+    def execute_query(self, query, *args, **kw):
+        d = self.exists()
+        d.addCallback(_false_to_error, CollectionMissingError(self.name))
+        d.addCallback(lambda _: self._execute_query(query, *args, **kw))
+        return d

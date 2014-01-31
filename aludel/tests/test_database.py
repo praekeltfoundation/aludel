@@ -37,39 +37,39 @@ class Test_PrefixedTables(TestCase):
         err = self.assertRaises(NotImplementedError, my_tables.exists)
         assert err.args[0] == "_PrefixedTables should not be used directly."
 
-    def test_execute_happy(self):
+    def test__execute_query_happy(self):
         """
-        .execute_query() should query the database and return a result.
+        ._execute_query() should query the database and return a result.
         """
         my_tables = _PrefixedTables("prefix", self.conn)
-        result = self.successResultOf(my_tables.execute_query("SELECT 42;"))
+        result = self.successResultOf(my_tables._execute_query("SELECT 42;"))
         rows = self.successResultOf(result.fetchall())
         assert rows == [(42,)]
 
-    def test_execute_no_table(self):
+    def test__execute_error(self):
         """
-        .execute_query() should fail with TableMissingError if asked to query a
-        table that does not exist.
+        ._execute_query() should fail if given an invalid query.
         """
         my_tables = _PrefixedTables("prefix", self.conn)
-        self.failureResultOf(
-            my_tables.execute_query("SELECT * FROM foo;"), TableMissingError)
+        self.failureResultOf(my_tables._execute_query("SELECT ;;"))
 
-    def test_execute_error(self):
+    def test_execute_query_not_implemented(self):
         """
-        .execute_query() should fail if given an invalid query.
+        .execute_query() should raise a NotImplementedError.
         """
         my_tables = _PrefixedTables("prefix", self.conn)
-        self.failureResultOf(my_tables.execute_query("SELECT ;;"))
+        err = self.assertRaises(
+            NotImplementedError, my_tables.execute_query, "SELECT 42;")
+        assert err.args[0] == "_PrefixedTables should not be used directly."
 
-    def test_execute_fetchall(self):
+    def test_execute_fetchall_not_implemented(self):
         """
-        .execute_fetchall() should query the database and return all rows from
-        the result.
+        .execute_fetchall() should raise a NotImplementedError.
         """
         my_tables = _PrefixedTables("prefix", self.conn)
-        rows = self.successResultOf(my_tables.execute_fetchall("SELECT 42;"))
-        assert rows == [(42,)]
+        err = self.assertRaises(
+            NotImplementedError, my_tables.execute_fetchall, "SELECT 42;")
+        assert err.args[0] == "_PrefixedTables should not be used directly."
 
 
 class TestCollectionMetadata(TestCase):
@@ -484,3 +484,49 @@ class TestTableCollection(TestCase):
         assert self.successResultOf(my_tables.get_metadata()) == {}
         self.successResultOf(my_tables.set_metadata({'bar': 'baz'}))
         assert self.successResultOf(my_tables.get_metadata()) == {'bar': 'baz'}
+
+    def test_execute_query_happy(self):
+        """
+        .execute_query() should query the database and return a result.
+        """
+        my_tables = TableCollection("prefix", self.conn)
+        self.successResultOf(my_tables.create_tables())
+        result = self.successResultOf(my_tables.execute_query("SELECT 42;"))
+        rows = self.successResultOf(result.fetchall())
+        assert rows == [(42,)]
+
+    def test_execute_query_no_collection(self):
+        """
+        .execute_query() should fail with CollectionMissingError if the
+        collection does not exist.
+        """
+        my_tables = TableCollection("prefix", self.conn)
+        self.failureResultOf(
+            my_tables.execute_query("SELECT 42;"), CollectionMissingError)
+
+    def test_execute_query_error(self):
+        """
+        .execute_query() should fail if given an invalid query.
+        """
+        my_tables = TableCollection("prefix", self.conn)
+        self.successResultOf(my_tables.create_tables())
+        self.failureResultOf(my_tables.execute_query("SELECT ;;"))
+
+    def test_execute_fetchall_no_collection(self):
+        """
+        .execute_fetchall() should fail with CollectionMissingError if the
+        collection does not exist.
+        """
+        my_tables = TableCollection("prefix", self.conn)
+        self.failureResultOf(
+            my_tables.execute_fetchall("SELECT 42;"), CollectionMissingError)
+
+    def test_execute_fetchall(self):
+        """
+        .execute_fetchall() should query the database and return all rows from
+        the result.
+        """
+        my_tables = TableCollection("prefix", self.conn)
+        self.successResultOf(my_tables.create_tables())
+        rows = self.successResultOf(my_tables.execute_fetchall("SELECT 42;"))
+        assert rows == [(42,)]
