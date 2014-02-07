@@ -11,7 +11,9 @@ def get_engine(conn_str, reactor):
 
 
 class TableMissingError(Exception):
-    pass
+    """
+    Raised when a table does not exist in the database.
+    """
 
 
 class CollectionMissingError(Exception):
