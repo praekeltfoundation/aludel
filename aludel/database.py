@@ -40,6 +40,19 @@ def _false_to_error(result, err):
     return result
 
 
+TABLE_EXISTS_ERR_TEMPLATES = (
+    # SQLite
+    'table %(name)s already exists',
+    'table "%(name)s" already exists',
+    # PostgreSQL
+    'relation %(name)s already exists',
+    'relation "%(name)s" already exists',
+    # MySQL
+    'Table %(name)s already exists',
+    "Table '%(name)s' already exists",
+)
+
+
 class _PrefixedTables(object):
     def __init__(self, name, connection):
         self.name = name
@@ -59,20 +72,8 @@ class _PrefixedTables(object):
         # This works around alchimia's current inability to create tables only
         # if they don't already exist.
 
-        table_exists_err_templates = [
-            # SQLite
-            'table %(name)s already exists',
-            'table "%(name)s" already exists',
-            # PostgreSQL
-            'relation %(name)s already exists',
-            'relation "%(name)s" already exists',
-            # MySQL
-            'Table %(name)s already exists',
-            "Table '%(name)s' already exists",
-        ]
-
         def table_exists_errback(f):
-            for err_template in table_exists_err_templates:
+            for err_template in TABLE_EXISTS_ERR_TEMPLATES:
                 # Sometimes the table name is lowercased.
                 for name in (table.name, table.name.lower()):
                     if err_template % {'name': name} in str(f.value):
