@@ -15,7 +15,9 @@ class TableMissingError(Exception):
 
 
 class CollectionMissingError(Exception):
-    pass
+    """
+    Raised when no metadata was found for a :class:`TableCollection`.
+    """
 
 
 class make_table(object):
