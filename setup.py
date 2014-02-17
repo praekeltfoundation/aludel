@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="aludel",
-    version="0.3.0",
+    version="0.3.1",
     url='https://github.com/praekelt/aludel',
     license='MIT',
     description="A framework for RESTful services using Klein and Alchimia.",
