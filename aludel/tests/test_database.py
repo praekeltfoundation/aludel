@@ -146,7 +146,16 @@ class TestCollectionMetadata(DatabaseTestCase):
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
-        assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
+        assert self.successResultOf(cmd.collection_exists('foo')) is True
+
+    def test_collection_exists_cached(self):
+        """
+        .collection_exists() should return a cached result for the provided
+        name.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        cmd._existence_cache['foo'] = True
         assert self.successResultOf(cmd.collection_exists('foo')) is True
 
     def test_get_metadata_no_table(self):
@@ -166,76 +175,65 @@ class TestCollectionMetadata(DatabaseTestCase):
         self.successResultOf(cmd.create())
         self.failureResultOf(cmd.get_metadata('foo'), CollectionMissingError)
 
-    def test_get_metadata_from_cache(self):
+    def test_get_metadata(self):
         """
-        .get_metadata() should return metadata from the local cache if present.
-        """
-        cmd = CollectionMetadata('MyTables', self.conn)
-        cmd._metadata_cache['foo'] = json.dumps({'bar': 'baz'})
-        assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
-
-    def test_get_metadata_no_cache(self):
-        """
-        .get_metadata() should populate the local cache entry from the database
-        if necessary.
+        .get_metadata() should fetch metadata from the database.
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
-        cmd._metadata_cache.pop('foo')
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
-        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
 
-    def test_get_all_metadata_no_cache(self):
+    def test_get_metadata_updates_existence_cache(self):
         """
-        .get_all_metadata() should populate the local cache from the database
-        and return a copy of all the metadata.
+        .get_metadata() should update the existence cache.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
+        # Set this back to False because create_collection updated it.
+        cmd._existence_cache['foo'] = False
+        assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
+        assert cmd._existence_cache['foo'] is True
+
+    def test_get_metadata_updates_existence_cache_missing_collection(self):
+        """
+        .get_metadata() should update the existence cache.
+        """
+        cmd = CollectionMetadata('MyTables', self.conn)
+        self.successResultOf(cmd.create())
+        assert 'foo' not in cmd._existence_cache
+        self.failureResultOf(cmd.get_metadata('foo'), CollectionMissingError)
+        assert cmd._existence_cache['foo'] is False
+
+    def test_get_all_metadata(self):
+        """
+        .get_all_metadata() should fetch all metadata from the database.
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'a': 1}))
         self.successResultOf(cmd.create_collection('bar', {'b': 2}))
-        cmd._metadata_cache.clear()
         metadata = self.successResultOf(cmd.get_all_metadata())
         assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
-        assert cmd._metadata_cache == dict(
-            (k, json.dumps(v)) for k, v in metadata.iteritems())
-
-    def test_get_all_metadata_extra_cache(self):
-        """
-        .get_all_metadata() should remove extra entries from the local cache.
-        """
-        cmd = CollectionMetadata('MyTables', self.conn)
-        self.successResultOf(cmd.create())
-        self.successResultOf(cmd.create_collection('foo', {'a': 1}))
-        self.successResultOf(cmd.create_collection('bar', {'b': 2}))
-        cmd._metadata_cache['baz'] = json.dumps({'c': 3})
-        metadata = self.successResultOf(cmd.get_all_metadata())
-        assert metadata == {'foo': {'a': 1}, 'bar': {'b': 2}}
-        assert cmd._metadata_cache == dict(
-            (k, json.dumps(v)) for k, v in metadata.iteritems())
 
     def test__decode_all_metadata_with_none(self):
         """
         ._decode_all_metadata() should ignore empty metadata entries.
         """
         cmd = CollectionMetadata('MyTables', None)
-        metadata_cache = {'foo': json.dumps({'a': 1}), 'bar': None}
-        assert cmd._decode_all_metadata(metadata_cache) == {'foo': {'a': 1}}
+        metadata = {'foo': json.dumps({'a': 1}), 'bar': None}
+        assert cmd._decode_all_metadata(metadata) == {'foo': {'a': 1}}
 
     def test_set_metadata(self):
         """
-        .set_metadata() should update the database and the local cache.
+        .set_metadata() should update the database.
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo'))
-        assert cmd._metadata_cache['foo'] == json.dumps({})
+        assert self.successResultOf(cmd.get_metadata('foo')) == {}
         self.successResultOf(cmd.set_metadata('foo', {'bar': 'baz'}))
-        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
-        # Clear the local cache and assert that the new version is fetched from
-        # the db.
-        cmd._metadata_cache.pop('foo')
         assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
     def test_create_collection_no_table(self):
@@ -245,7 +243,8 @@ class TestCollectionMetadata(DatabaseTestCase):
         """
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create_collection('foo'))
-        assert cmd._metadata_cache['foo'] == json.dumps({})
+        assert cmd._existence_cache['foo'] is True
+        assert self.successResultOf(cmd.get_metadata('foo')) == {}
 
     def test_create_collection_no_metadata(self):
         """
@@ -255,7 +254,8 @@ class TestCollectionMetadata(DatabaseTestCase):
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo'))
-        assert cmd._metadata_cache['foo'] == json.dumps({})
+        assert cmd._existence_cache['foo'] is True
+        assert self.successResultOf(cmd.get_metadata('foo')) == {}
 
     def test_create_collection_with_metadata(self):
         """
@@ -265,7 +265,8 @@ class TestCollectionMetadata(DatabaseTestCase):
         cmd = CollectionMetadata('MyTables', self.conn)
         self.successResultOf(cmd.create())
         self.successResultOf(cmd.create_collection('foo', {'bar': 'baz'}))
-        assert cmd._metadata_cache['foo'] == json.dumps({'bar': 'baz'})
+        assert cmd._existence_cache['foo'] is True
+        assert self.successResultOf(cmd.get_metadata('foo')) == {'bar': 'baz'}
 
 
 class TestTableCollection(DatabaseTestCase):
