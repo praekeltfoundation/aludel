@@ -122,13 +122,13 @@ class CollectionMetadata(_PrefixedTables):
         Column("metadata_json", Text(), nullable=False),
     )
 
-    _metadata_cache_dict = None
+    _existence_cache_dict = None
 
     @property
-    def _metadata_cache(self):
-        if self._metadata_cache_dict is None:
-            self._metadata_cache_dict = {}
-        return self._metadata_cache_dict
+    def _existence_cache(self):
+        if self._existence_cache_dict is None:
+            self._existence_cache_dict = {}
+        return self._existence_cache_dict
 
     def get_table_name(self, name):
         return '%s_%s' % (name, self.name)
@@ -147,12 +147,14 @@ class CollectionMetadata(_PrefixedTables):
         d.addCallback(lambda _: self._execute_query(query, *args, **kw))
         return d
 
-    def _update_metadata(self, new_metadata, clear=False):
-        cache = self._metadata_cache
+    def _update_existence_cache(self, new_metadata, clear=False):
+        cache = self._existence_cache
         if clear:
             cache.clear()
-        cache.update(new_metadata)
-        return cache
+        cache.update(dict((k, False if v is None else True)
+                          for k, v in new_metadata.iteritems()))
+        # We return this so we can chain callbacks.
+        return new_metadata
 
     def _rows_to_dict(self, rows):
         metadata_dict = {}
@@ -164,7 +166,7 @@ class CollectionMetadata(_PrefixedTables):
         metadata_json = None
         if row is not None:
             metadata_json = row.metadata_json
-        self._update_metadata({name: metadata_json})
+        self._update_existence_cache({name: metadata_json})
         return metadata_json
 
     def _none_if_table_missing_eb(self, failure):
@@ -177,15 +179,11 @@ class CollectionMetadata(_PrefixedTables):
         return json.loads(metadata_json)
 
     def _get_metadata(self, name):
-        cache = self._metadata_cache
-        if name not in cache:
-            d = self.execute_query(
-                self.collection_metadata.select().where(
-                    self.collection_metadata.c.name == name))
-            d.addCallback(lambda result: result.fetchone())
-            d.addCallback(self._add_row_to_metadata, name)
-        else:
-            d = succeed(cache[name])
+        d = self.execute_query(
+            self.collection_metadata.select().where(
+                self.collection_metadata.c.name == name))
+        d.addCallback(lambda result: result.fetchone())
+        d.addCallback(self._add_row_to_metadata, name)
         return d
 
     def get_metadata(self, name):
@@ -204,19 +202,18 @@ class CollectionMetadata(_PrefixedTables):
     def get_all_metadata(self):
         d = self.execute_fetchall(self.collection_metadata.select())
         d.addCallback(self._rows_to_dict)
-        d.addCallback(self._update_metadata, clear=True)
+        d.addCallback(self._update_existence_cache, clear=True)
         d.addCallback(self._decode_all_metadata)
         return d
 
     def set_metadata(self, name, metadata):
         metadata_json = json.dumps(metadata)
-        self._metadata_cache.pop(name, None)
         d = self.execute_query(
             self.collection_metadata.update().where(
                 self.collection_metadata.c.name == name,
             ).values(metadata_json=metadata_json))
         d.addCallback(lambda result: {name: metadata_json})
-        d.addCallback(self._update_metadata)
+        d.addCallback(self._update_existence_cache)
         return d
 
     def _create_collection(self, exists, name, metadata):
@@ -232,7 +229,7 @@ class CollectionMetadata(_PrefixedTables):
             self.collection_metadata.insert().values(
                 name=name, metadata_json=metadata_json)))
         d.addCallback(lambda result: {name: metadata_json})
-        d.addCallback(self._update_metadata)
+        d.addCallback(self._update_existence_cache)
         return d
 
     def create_collection(self, name, metadata=None):
@@ -267,8 +264,10 @@ class CollectionMetadata(_PrefixedTables):
             A :class:`Deferred` that fires with ``True``, ``False``, or
             ``None``.
         """
-        d = self._get_metadata(name)
-        d.addCallback(lambda cached_md: False if cached_md is None else True)
+        d = succeed(name)
+        if name not in self._existence_cache:
+            d.addCallback(self._get_metadata)
+        d.addCallback(lambda _: self._existence_cache[name])
         d.addErrback(self._none_if_table_missing_eb)
         return d
 
