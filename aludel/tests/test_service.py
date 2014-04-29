@@ -235,6 +235,20 @@ class TestService(TestCase):
             'hello': 'world',
         }
 
+    def test_retain_docstrings(self):
+
+        @service.service
+        class FooService(object):
+            @service.handler('/hello/<string:who>')
+            def hello(slf, request, who):
+                """this is the docstring, I am fond of it. Please keep it"""
+                return {'hello': who}
+
+        srv = FooService()
+        self.assertEqual(
+            srv.hello.__doc__,
+            "this is the docstring, I am fond of it. Please keep it")
+
     @inlineCallbacks
     def test_get_handler_with_params(self):
         @service.service
